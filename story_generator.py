@@ -1,109 +1,76 @@
 import streamlit as st
-from transformers import pipeline, TFAutoModelForCausalLM, AutoTokenizer
+import requests
 
-# Cache the model and tokenizer loading to avoid reloading every time the app is rerun
-@st.cache_resource
-def load_model():
-    model_name = "gpt2-medium"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = TFAutoModelForCausalLM.from_pretrained(model_name)
-    return model, tokenizer
+# Define your API key and endpoint
+api_key = 'AIzaSyAhAEsUOgZxiR4b77fFkX2tdNbzQmywdlU'
+endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
 
-# Load the model and tokenizer
-model, tokenizer = load_model()
+# Function to generate a story
+def generate_story(prompt):
+    headers = {
+        'Content-Type': 'application/json',
+    }
+    data = {
+        'contents': [
+            {
+                'parts': [
+                    {'text': prompt}
+                ]
+            }
+        ]
+    }
+    response = requests.post(f"{endpoint}?key={api_key}", headers=headers, json=data)
+    response.raise_for_status()
+    
+    response_data = response.json()
+    
+    if response_data.get('candidates', [{}])[0].get('finishReason') == 'SAFETY':
+        return 'Content was blocked due to safety concerns. Please try a different prompt.'
+    
+    try:
+        content_parts = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])
+        return ' '.join(part.get('text', '') for part in content_parts)
+    except (IndexError, KeyError):
+        return 'No story generated'
 
-# Initialize the text generation pipeline
-generator = pipeline(
-    'text-generation', 
-    model=model, 
-    tokenizer=tokenizer,
-    max_length=300,
-    temperature=0.7, 
-    top_p=0.95,
-    top_k=50,
-    repetition_penalty=1.2
-)
-
-# Streamlit UI
-st.set_page_config(page_title="Story Generator", page_icon=":book:", layout="wide")
-
-# Custom CSS to enhance the UI
-st.markdown("""
+# Streamlit interface
+def main():
+    # Custom CSS for styling
+    st.markdown("""
     <style>
-    .main {
-        background-color: #f0f2f6;
-    }
-    .title {
-        font-size: 2.5em;
-        color: #2d3436;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 20px;
-        padding: 10px;
-        background: linear-gradient(90deg, #74b9ff, #a29bfe);
-        border-radius: 10px;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-    }
-    .description {
-        font-size: 1.2em;
-        color: #636e72;
-        text-align: center;
-        margin-bottom: 30px;
-        padding: 0 20px;
-    }
-    .stTextInput {
-        background-color: #e0f7fa;
-        border: 2px solid #00796b;
-        border-radius: 5px;
-        padding: 10px;
-    }
-    .stButton {
-        background-color: #009688;
-        color:#00796 ;
-        font-weight: bold;
-        border-radius: 5px;
-        padding: 8px 16px;
-        border: none;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-    .stButton:hover {
-        background-color: #00796b;
-    }
-    .story-output {
-        border: 2px solid #dfe6e9;
-        border-radius: 15px;
-        padding: 20px;
-        background-color: #ffffff;
-        font-family: 'Georgia', serif;
-        font-size: 1.2em;
-        line-height: 1.8;
-        white-space: pre-wrap;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-        max-width: 800px;
-        margin: auto;
-    }
+    .main {background-color: #f9f9f9;}
+    .header {background-color: #3498db; color: white; padding: 20px; text-align: center; border-radius: 10px;}
+    .text {color: #333;}
+    .container {background-color: white; border-radius: 15px; padding: 30px; margin: 20px auto; width: 80%; box-shadow: 0px 6px 12px rgba(0,0,0,0.1);}
+    .input-container {margin-top: 20px; margin-bottom: 20px;}
+    .button {background-color: #3498db; color: white; border: none; border-radius: 5px; padding: 12px 24px; cursor: pointer; font-size: 16px;}
+    .button:hover {background-color: #2980b9;}
+    .textarea {margin-top: 20px; border-radius: 5px; border: 1px solid #ddd; padding: 10px;}
+    .image {display: block; margin: 0 auto;}
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-st.markdown('<div class="title">Story Generator</div>', unsafe_allow_html=True)
-st.markdown('<div class="description">Generate a creative and engaging story using an LLM model!</div>', unsafe_allow_html=True)
+    # Displaying a logo image (replace 'logo.png' with your image file)
+    # st.image('logo.png', width=200, caption="Story Generator")
 
-# User input for story prompt
-prompt = st.text_input("Enter a prompt for your story:", "")
+    # Title and introduction
+    st.markdown('<div class="header"><h1>🌟 Story Generator with Google Gemini API 🌟</h1></div>', unsafe_allow_html=True)
+    st.write("Generate unique stories with a touch of magic! ✨")
 
-# User input for story length
-max_length = st.slider("Select the maximum length of the story:", min_value=100, max_value=1000, value=300)
+    # Main layout for generating and displaying the story
+    st.markdown('<div class="container">', unsafe_allow_html=True)
+    prompt = st.text_area("Story Prompt", "Write a story about a group of friends who discover a hidden treasure map and embark on an exciting adventure to find it.", height=200, key="prompt", help="Enter your story prompt here. Be creative!")
 
-# Generate story when the button is clicked
-if st.button("Generate Story"):
-    if prompt:
-        # Show spinner while generating the story
+    if st.button("Generate Story", key="generate_button"):
         with st.spinner("Generating your story..."):
-            refined_prompt = f"Once upon a time, {prompt}"
-            stories = generator(refined_prompt, max_length=max_length, num_return_sequences=1)
-            
-        # Display the story in a styled format
-        st.markdown(f'<div class="story-output">{stories[0]["generated_text"]}</div>', unsafe_allow_html=True)
-    else:
-        st.write("Please enter a prompt to generate a story.")
+            try:
+                story = generate_story(prompt)
+                st.write("### Generated Story:")
+                st.write(story)
+            except requests.exceptions.RequestException as e:
+                st.error(f"An error occurred: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+if _name_ == "_main_":
+    main()
