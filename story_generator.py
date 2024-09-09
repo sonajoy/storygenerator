@@ -1,10 +1,16 @@
 import streamlit as st
 from transformers import pipeline, TFAutoModelForCausalLM, AutoTokenizer
 
-# Load the pre-trained model and tokenizer
-model_name = "gpt2-medium"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = TFAutoModelForCausalLM.from_pretrained(model_name)
+# Cache the model and tokenizer loading to avoid reloading every time the app is rerun
+@st.cache_resource
+def load_model():
+    model_name = "gpt2-medium"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = TFAutoModelForCausalLM.from_pretrained(model_name)
+    return model, tokenizer
+
+# Load the model and tokenizer
+model, tokenizer = load_model()
 
 # Initialize the text generation pipeline
 generator = pipeline(
@@ -13,8 +19,8 @@ generator = pipeline(
     tokenizer=tokenizer,
     max_length=300,
     temperature=0.7, 
-    top_p=0.95,  # Increase top_p for more coherent outputs
-    top_k=50,  
+    top_p=0.95,
+    top_k=50,
     repetition_penalty=1.2
 )
 
@@ -92,10 +98,11 @@ max_length = st.slider("Select the maximum length of the story:", min_value=100,
 # Generate story when the button is clicked
 if st.button("Generate Story"):
     if prompt:
-        # Refine the prompt by making it more descriptive or providing a specific scenario
-        refined_prompt = f"Once upon a time, {prompt}"
-        
-        stories = generator(refined_prompt, max_length=max_length, num_return_sequences=1)
+        # Show spinner while generating the story
+        with st.spinner("Generating your story..."):
+            refined_prompt = f"Once upon a time, {prompt}"
+            stories = generator(refined_prompt, max_length=max_length, num_return_sequences=1)
+            
         # Display the story in a styled format
         st.markdown(f'<div class="story-output">{stories[0]["generated_text"]}</div>', unsafe_allow_html=True)
     else:
